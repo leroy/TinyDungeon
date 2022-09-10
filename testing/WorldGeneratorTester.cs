@@ -1,6 +1,12 @@
 using Godot;
 using System;
+using System.Collections.Generic;
 using TinyDungeon;
+using TinyDungeon.Grid;
+using TinyDungeon.World;
+using TinyDungeon.WorldGenerator;
+using Tile = TinyDungeon.World.Tile;
+using TileSet = TinyDungeon.World.TileSet;
 
 public class WorldGeneratorTester : Control
 {
@@ -11,38 +17,116 @@ public class WorldGeneratorTester : Control
 	[Export]
 	public NodePath world;
 
+	private ViewportContainer _viewportContainer;
+
 	private Viewport viewport;
+
+	private Camera2D _camera;
 	
-	private ViewportContainer viewportContainer;
-	
+	private DungeonGenerator _generator;
+
+	private World worldScene;
+
+	private TileMap _tileMap;
+
+	private Vector2 _mousePosition;
+
+	private Vector2 _selectedTilePosition;
+
+	private Vector2 _prevSelectedTilePosition;
+
+
 	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
 	{
 		SetProcessInput(true);
-		
-		viewportContainer = GetNode<ViewportContainer>("ViewportContainer");
+
+		_viewportContainer = GetNode<ViewportContainer>("ViewportContainer");
 		viewport = GetNode<Viewport>("ViewportContainer/Viewport");
-		viewport.Size = new Vector2(480, 320);
+		_camera = GetNode<Camera2D>("ViewportContainer/Viewport/TouchCamera2D");
 		
-		WorldGenerator worldGenerator = new WorldGenerator();
+		viewport.Size = new Vector2(480, 320);
 
+		_generator = new DungeonGenerator(new DungeonGenerator.DungeonGeneratorSettings());
 
-		World worldScene = GetNode<World>(world);
+		worldScene = GetNode<World>(world);
 
-		TileMap tileMap = worldScene.GetNode<TileMap>("TileMap");
+		_tileMap = worldScene.GetNode<TileMap>("TileMap");
 
-		TileGrid grid = worldGenerator.Generate();
+		UpdateTileMap();
+	}
 
-		Tile[] tiles = grid.GetTiles();
+	public override void _Input(InputEvent @event)
+	{
+		if (@event is InputEventMouseMotion)
+		{
+			_mousePosition = (((InputEventMouseMotion) @event).Position - _viewportContainer.RectGlobalPosition) / (GetViewportRect().Size / viewport.Size);
+			_selectedTilePosition = _tileMap.WorldToMap(_mousePosition + _camera.GetCameraPosition());
 
-		foreach(Tile tile in tiles) {
-			tileMap.SetCell((int) tile.Position.x, (int) tile.Position.y, ((int)tile.Type));
+			if (_selectedTilePosition != _prevSelectedTilePosition)
+			{
+				UpdateTileInfo();
+			}
 		}
 	}
 
-	//  // Called every frame. 'delta' is the elapsed time since the previous frame.
-//  public override void _Process(float delta)
-//  {
-//      
-//  }
+	private void UpdateTileInfo()
+	{
+		Label tileType = GetNode<Label>("TileInfoOverlay/MarginContainer/GridContainer/TileType");
+		Label tilePosition = GetNode<Label>("TileInfoOverlay/MarginContainer/GridContainer/TilePosition");
+
+		Tile tile = _generator.GetResults().Data.GetTile(_selectedTilePosition);
+
+		tileType.Text = tile.Type.ToString();
+		tilePosition.Text = tile.Position.ToString();
+		
+		_prevSelectedTilePosition = _selectedTilePosition;
+	}
+
+
+	private void _on_Reset_pressed()
+	{
+		_generator.Reset();
+		UpdateTileMap();
+	}
+
+
+	private void _on_Generate_pressed()
+	{
+		_generator.Reset();
+		_generator.Generate();
+		UpdateTileMap();
+	}
+
+	private void _on_Step_pressed()
+	{
+		UpdateTileMap();
+	}
+
+	private void UpdateTileMap()
+	{
+		_tileMap.Clear();
+
+		foreach (Tile tile in _generator.GetResults())
+		{
+
+			TileSetTile tileSetTile = TileSet.GetTileId(tile.Type);
+			
+			_tileMap.SetCell((int) tile.Position.x, (int) tile.Position.y, tileSetTile.Id, tileSetTile.FlipX, tileSetTile.FlipY, tileSetTile.Transpose);
+		}
+		
+		// Tile[][] tiles = _generator.GetResults().Tiles;
+
+		// for (int x = 0; x < tiles.Length; x++)
+		// {
+			// for (int y = 0; y < tiles[x].Length; y++)
+			// {
+				// tileMap.SetCell(x, y, TileSet.GetTileId(tiles[x][y].Type));
+
+			// }
+		// }
+	}
 }
+
+
+
